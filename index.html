@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>Reconstruction Viewer</title>
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body { margin: 0;   background: #000;}
+			canvas { width: 100%; height: 100% }
+		</style>
+	</head>
+	<body>
+		<div id="info">
+			<!-- <a href="http://threejs.org" target="_blank" rel="noopener">three.js</a> - FBXLoader<br /> -->
+			
+		</div>
+		<script type="module">
+
+			//TODO:
+			//* multiple materials
+			//* Camera focus based on object bounds
+			//* Show/Hide GUI depending on controllers length
+
+			import * as THREE from './three.js-r110/build/three.module.js';
+			import Stats from './three.js-r110/examples/jsm/libs/stats.module.js';
+			import { WEBGL } from './three.js-r110/examples/jsm/WebGL.js';
+			import { OrbitControls } from './three.js-r110/examples/jsm/controls/OrbitControls.js';
+			import { FBXLoader } from './three.js-r110/examples/jsm/loaders/FBXLoader.js';
+			import { MTLLoader } from "./three.js-r110/examples/jsm/loaders/MTLLoader.js";
+			import { OBJLoader2 } from "./three.js-r110/examples/jsm/loaders/OBJLoader2.js";
+			import { MtlObjBridge } from "./three.js-r110/examples/jsm/loaders/obj2/bridge/MtlObjBridge.js";
+			import { LoadingManager } from './three.js-r110/src/loaders/LoadingManager.js';
+			import * as dat from './dat.gui/build/dat.gui.module.js'
+
+			var container, stats, controls;
+			var camera, scene, renderer, light;
+
+			var url_params = {};
+			var obj = null;
+			var texture = null;
+			var clock = new THREE.Clock();
+
+			var gui;
+			var fizzyText;
+			var loading_bar_controllers = {};
+			
+
+			var ambient_color = 0x000000;
+
+			var load_manager;
+
+			function init() 
+			{
+				if ( !WEBGL.isWebGLAvailable() ) 
+				{
+					var warning = WEBGL.getWebGLErrorMessage();
+					document.getElementById( 'container' ).appendChild( warning );
+					return;
+				}
+
+				container = document.createElement( 'div' );
+				document.body.appendChild( container );
+				camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.001, 20000 );
+				camera.position.set( 100, 200, 300 );
+				scene = new THREE.Scene();
+				// scene.background = new THREE.Color( ambient_color );
+				// scene.fog = new THREE.Fog( ambient_color, 200, 1000 );
+
+				let ambientLight = new THREE.AmbientLight( 0xFFFFFF );
+
+				// let directionalLight1 = new THREE.DirectionalLight( 0xFFFFFF );
+				// let directionalLight2 = new THREE.DirectionalLight( 0xFFFFFF );
+				// directionalLight1.position.set( - 100, - 50, 100 );
+				// directionalLight2.position.set( 100, 50, - 100 );
+				// scene.add( directionalLight1 );
+				// scene.add( directionalLight2 );				
+				scene.add( ambientLight );
+
+				// scene.add( new CameraHelper( light.shadow.camera ) );
+				// ground
+				var mesh = new THREE.Mesh( new THREE.PlaneBufferGeometry( 2000, 2000 ), new THREE.MeshPhongMaterial( { color: 0x999999, depthWrite: false } ) );
+				mesh.rotation.x = - Math.PI / 2;
+				mesh.receiveShadow = false;
+				mesh.material.side = THREE.DoubleSide;
+				scene.add( mesh );
+				var grid = new THREE.GridHelper( 2000, 20, 0x000000, 0x000000 );
+				grid.material.opacity = 1.0;
+				grid.material.transparent = true;
+				
+				scene.add( grid );
+
+				renderer = new THREE.WebGLRenderer( { antialias: true } );
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				renderer.shadowMap.enabled = true;
+				container.appendChild( renderer.domElement );
+				controls = new OrbitControls( camera, renderer.domElement );
+				controls.update();
+
+				window.addEventListener( 'resize', onWindowResize, false );
+
+				stats = new Stats();
+				container.appendChild( stats.dom );
+
+				animate();
+
+				parseURLParameters();
+
+				initialize_load_manager();
+
+				loadSceneObjects();
+			}
+
+			function onLoadModelDescriptionProgress(xhr)
+			{
+				var url = xhr.currentTarget.responseURL;
+				url = url.substring(url.lastIndexOf('/') + 1);
+				
+				console.log( url +' ' + (xhr.loaded / xhr.total * 100) + '% loaded' );
+				if(loading_bar_controllers != null && loading_bar_controllers[url])
+				{
+					loading_bar_controllers[url].setValue(xhr.loaded / xhr.total * 100);
+				}
+			}
+
+			function onLoadObjectProgress(xhr)
+			{
+				var url = xhr.currentTarget.responseURL;
+				url = url.substring(url.lastIndexOf('/') + 1);
+
+				console.log( url +' ' + (xhr.loaded / xhr.total * 100) + '% loaded' );
+				if(loading_bar_controllers != null && loading_bar_controllers[url])
+				{
+					loading_bar_controllers[url].setValue(xhr.loaded / xhr.total * 100);
+				}
+			}
+
+			function onLoadMaterialProgress(xhr)
+			{
+				var url = xhr.currentTarget.responseURL;
+				url = url.substring(url.lastIndexOf('/') + 1);
+				
+				console.log( url +' ' + (xhr.loaded / xhr.total * 100) + '% loaded' );
+				if(loading_bar_controllers != null && loading_bar_controllers[url])
+				{
+					loading_bar_controllers[url].setValue(xhr.loaded / xhr.total * 100);
+				}
+			}
+
+			function onLoadModelDescriptionError(err)
+			{
+				console.error( 'An error happened: ' + err );
+
+			}
+
+			function onLoadObjectError(err)
+			{
+				console.error( 'An error happened: ' + err );
+
+			}
+
+			function onLoadMaterialError(err)
+			{
+				console.error( 'An error happened: ' + err );
+			}
+
+			function onError(err)
+			{
+				console.error( 'An error happened: ' + err );
+			}
+
+			function initialize_load_manager()
+			{
+				load_manager = new LoadingManager();
+				var tx_loader = new THREE.TextureLoader(load_manager);
+				load_manager.addHandler(/\.png$/i, tx_loader);
+				load_manager.addHandler(/\.jpg$/i, tx_loader);
+				load_manager.addHandler(/\.tif$/i, tx_loader);
+				load_manager.addHandler(/\.mtl$/i, new MTLLoader(load_manager));
+				load_manager.addHandler(/\.obj$/i, new OBJLoader2(load_manager));
+				load_manager.addHandler(/\.fbx$/i, new FBXLoader(load_manager));
+				load_manager.addHandler(/\.json$/i, new THREE.FileLoader(load_manager));
+			}
+
+			function parseURLParameters()
+			{
+				// get URL query string
+				let params = window.location.href;
+				params = params.replace(window.location.origin,"");
+				params = params.replace(window.location.pathname,"");
+				// remove the '#' character
+				params = params.substr(1);
+				// // split the query parameters
+				// let queryParamArray = params.split('&');
+				// // iterate over parameter array
+				// queryParamArray.forEach(function(queryParam) {
+				// 	// split the query parameter over '='
+				// 	let item = queryParam.split('=');
+				// 	url_params[item[0]] = decodeURIComponent(item[1]);
+				// });
+				// print result object
+				// console.log(url_params);
+				url_params['model'] = decodeURIComponent(params);
+			}
+
+			function loadSceneObjects()
+			{
+				//figure out urls for stuff here and use later
+				let resource_path = 'resources/' + url_params['model'] + '/';
+
+				var json_filename = 'model.json';
+				var json_file_descr =  resource_path + json_filename;
+				var json;
+				{
+					let json_loader = load_manager.getHandler(json_filename);
+					json_loader.setPath(resource_path);
+
+					//Create gui for json load
+					loading_bar_controllers[json_filename] = gui.add(fizzyText, 'loading_model_description', 0, 100);
+					loading_bar_controllers[json_filename].setValue(0);
+
+					json_loader.load( json_filename, function ( text ) 
+					{
+						//gui update
+						gui.remove(loading_bar_controllers[json_filename]);
+						delete loading_bar_controllers[json_filename];
+
+						json = JSON.parse(text);
+						const promises = [
+							loadObject(resource_path, json)
+						];
+						
+						return Promise.all(promises).then(result => {
+							obj = result[0];
+							scene.add(obj);
+
+							init_finalize(json);
+							return;
+						});
+					},
+					onLoadModelDescriptionProgress,
+					onLoadModelDescriptionError);
+				}
+
+				
+			}
+
+			function loadObject(resource_path, json)
+			{
+				var model_filename = json.model;
+				var model_mtl_filename = json.materials;
+
+				if(model_mtl_filename)
+				{
+					return new Promise(resolve => {
+						let materials_loader = load_manager.getHandler(model_mtl_filename);
+						// materials_loader.setPath(resource_path);
+						// materials_loader.setResourcePath('');
+
+						//Create gui for materials load
+						loading_bar_controllers[model_mtl_filename] = gui.add(fizzyText, 'loading_materials', 0, 100);
+						loading_bar_controllers[model_mtl_filename].setValue(0);
+
+						materials_loader.setMaterialOptions({
+							side: THREE.DoubleSide
+						});
+
+						materials_loader.load(resource_path + "/" + model_mtl_filename, 
+						//onLoad callback
+						function ( materials ) 
+						{
+							//gui update
+							gui.remove(loading_bar_controllers[model_mtl_filename]);
+							delete loading_bar_controllers[model_mtl_filename];
+
+							materials.preload();
+
+							let model_loader = load_manager.getHandler(model_filename);
+							model_loader.addMaterials( MtlObjBridge.addMaterialsFromMtlLoader( materials ), true );
+							model_loader.setUseIndices(true);
+							model_loader.setDisregardNormals(false);
+							model_loader.setModelName(model_filename);
+							// model_loader.setPath(resource_path);
+							
+							//Create gui for json load
+							loading_bar_controllers[model_filename] = gui.add(fizzyText, 'loading_objects', 0, 100);
+							loading_bar_controllers[model_filename].setValue(0);
+
+							model_loader.load(resource_path + "/" + model_filename,
+							function (object)
+							{
+								//gui update
+								object.name = model_filename;
+								gui.remove(loading_bar_controllers[model_filename]);
+								delete loading_bar_controllers[model_filename];
+
+								resolve(object);
+							},
+							onLoadObjectProgress,
+							onLoadObjectError
+							);
+						},
+						onLoadMaterialProgress,
+						onLoadMaterialError
+						);
+
+					});
+				}
+				else{
+					return new Promise(resolve => {
+						let loader = load_manager.getHandler(model_filename);
+						loader.setPath(resource_path);
+						loader.setResourcePath('');
+						
+						//Create gui for json load
+						loading_bar_controllers[model_filename] = gui.add(fizzyText, 'loading_objects', 0, 100);
+						loading_bar_controllers[model_filename].setValue(0);
+
+						loader.load(model_filename, 
+						//onLoad callback
+						function ( object ) 
+						{
+							//gui update
+							gui.remove(loading_bar_controllers[model_filename]);
+							delete loading_bar_controllers[model_filename];
+
+							resolve(object);
+						},
+						onLoadObjectProgress,
+						onError
+						);
+
+					});
+				}
+			}
+
+			function init_finalize(json)
+			{
+				if(obj != null)
+				{
+					controls.target.set( obj.position.x, obj.position.y, obj.position.z );
+					controls.update();
+				}
+
+				if(json.hasOwnProperty('position'))
+				{
+					obj.position.set(json.position[0], json.position[1], json.position[2]);
+				}
+
+				if(json.hasOwnProperty('scale'))
+				{
+					obj.scale.set(json.scale[0], json.scale[1], json.scale[2]);
+				}
+					
+				if(json.hasOwnProperty('euler_rotation'))
+				{
+					obj.rotation.set(THREE.Math.degToRad(json.euler_rotation[0]), 
+											THREE.Math.degToRad(json.euler_rotation[1]), 
+											THREE.Math.degToRad(json.euler_rotation[2]));
+				}
+				else
+				{
+					obj.rotation.x = -THREE.Math.degToRad(90);
+				}
+				// for( var i = 0; i < obj.children.length; ++i)
+				// {
+				// 	var submesh = obj.children[i];
+				// 	for(var j=0;j< submesh.material.length;j++)
+				// 	{
+				// 		var material = submesh.material[j];
+				// 		material.color = new THREE.Color(0xffffff);
+				// 		material.needsUpdate = true;
+				// 	}
+				// }
+
+				var resultingBoundingBox = new THREE.Box3();
+				resultingBoundingBox.min = new THREE.Vector3(Number.MAX_VALUE);
+				resultingBoundingBox.max = new THREE.Vector3(Number.MIN_VALUE);
+				{
+					// initialize bounding box
+					var boundingBox = { min: new THREE.Vector3(Number.MAX_VALUE), max: new THREE.Vector3(Number.MIN_VALUE) };
+					var offset = new THREE.Vector3();
+
+					// get bounding box of group
+					for( var i = 0; i < obj.children.length; ++i)
+					{
+						var childBox = obj.children[i].geometry.boundingBox;
+
+						if(childBox == null)
+						{
+							obj.children[i].geometry.computeBoundingBox();
+							childBox = obj.children[i].geometry.boundingBox;
+						}
+
+						// bbox min
+						boundingBox.min.x = Math.min(childBox.min.x, boundingBox.min.x);
+						boundingBox.min.y = Math.min(childBox.min.y, boundingBox.min.y);
+						boundingBox.min.z = Math.min(childBox.min.z, boundingBox.min.z);
+
+						//bbox max
+						boundingBox.max.x = Math.max(childBox.max.x, boundingBox.max.x);
+						boundingBox.max.y = Math.max(childBox.max.y, boundingBox.max.y);
+						boundingBox.max.z = Math.max(childBox.max.z, boundingBox.max.z);
+					}
+
+					// get center of bbox
+					offset.addVectors( boundingBox.min, boundingBox.max );
+					offset.multiplyScalar( -0.5 );
+
+					// move all meshes
+					for( var i = 0; i < obj.children.length; ++i)
+					{
+						// apply matrix translation
+						obj.children[i].geometry.applyMatrix( new THREE.Matrix4().makeTranslation( offset.x, offset.y, offset.z ) );
+						// update bbox of each mesh
+						obj.children[i].geometry.computeBoundingBox();
+						var childBox = obj.children[i].geometry.boundingBox;
+
+						// bbox min
+						resultingBoundingBox.min.x = Math.min(childBox.min.x, resultingBoundingBox.min.x);
+						resultingBoundingBox.min.y = Math.min(childBox.min.y, resultingBoundingBox.min.y);
+						resultingBoundingBox.min.z = Math.min(childBox.min.z, resultingBoundingBox.min.z);
+
+						//bbox max
+						resultingBoundingBox.max.x = Math.max(childBox.max.x, resultingBoundingBox.max.x);
+						resultingBoundingBox.max.y = Math.max(childBox.max.y, resultingBoundingBox.max.y);
+						resultingBoundingBox.max.z = Math.max(childBox.max.z, resultingBoundingBox.max.z);
+					}
+					
+				}
+
+				var bb_center = new THREE.Vector3();
+				bb_center.addVectors( resultingBoundingBox.min, resultingBoundingBox.max );
+				bb_center.multiplyScalar( -0.5 );
+
+				var extents = new THREE.Vector3();
+				resultingBoundingBox.getSize(extents);
+				extents.divideScalar(2.0);
+
+				var new_camera_position = new THREE.Vector3();
+				new_camera_position.addVectors(bb_center, extents);
+				new_camera_position.multiplyScalar( 2 );
+
+				camera.position.set(new_camera_position.x, new_camera_position.y, new_camera_position.z);
+
+				// progress_bar.style.display = "none"; //Hide progress bar
+				
+
+
+			}
+
+			function onWindowResize() 
+			{
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize( window.innerWidth, window.innerHeight );
+			}
+			
+			//
+			function animate() 
+			{
+				requestAnimationFrame( animate );
+				var delta = clock.getDelta();
+				camera.lookAt(new THREE.Vector3( 0, 0, 0 ));
+				renderer.render( scene, camera );
+				stats.update();
+				if(gui)
+				{
+					for (var i in gui.__controllers) 
+					{
+						gui.__controllers[i].updateDisplay();
+					}
+				}
+			}
+
+			var FizzyText = function() 
+			{
+				this.loading_model_description = 0;
+				this.loading_materials = 0;
+				this.loading_objects = 0;
+			// this.explode = function() { ... };
+			// Define render logic ...
+			};
+
+			function propName(obj, prop)
+			{
+				var keys = Object.keys(obj);
+				for(var i in keys) 
+				{
+					if (keys[i] == prop)
+					{
+						return i;
+					}
+				}
+				return null;
+			}
+
+			window.onload = function()
+			{
+				// gui = new dat.GUI({ autoPlace: false });
+
+				gui = new dat.GUI();
+				// var customContainer = document.getElementById('loading_bar_div');
+				// customContainer.appendChild(gui.domElement);
+
+				fizzyText = new FizzyText();
+				init();
+			}
+
+		</script>
+	</body>
+</html>
