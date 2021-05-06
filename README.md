@@ -5,14 +5,14 @@ The viewer expects to be in the same filesystem as the resources to be loaded:
 ```
 L recon-viewer
     L index.html
-L resources
-    L <folder_name>
-    L <folder_name>
-    L <folder_name>
-        L model.json
-        L recon.obj
-        L recon.mtl
-        L recon-texture.png
+    L resources
+        L <folder_name>
+        L <folder_name>
+        L <folder_name>
+            L model.json
+            L recon.obj
+            L recon.mtl
+            L recon-texture.png
 ```
 To view recon.obj the URL should be:
 ```http://<server-path-to-recon>/?<folder_name>```
