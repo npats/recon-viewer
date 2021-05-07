@@ -1,0 +1,128 @@
+{
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "type": "VEC3",
+      "count": 36,
+      "min": [-0.5, -0.5, -0.5],
+      "max": [0.5, 0.5, 0.5]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "type": "VEC3",
+      "count": 36
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "type": "VEC2",
+      "count": 36
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5125,
+      "type": "SCALAR",
+      "count": 36
+    }
+  ],
+  "asset": {
+    "copyright": "2021",
+    "generator": "FEditor",
+    "version": "2.0"
+  },
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 432
+    },
+    {
+      "buffer": 0,
+      "byteLength": 432,
+      "byteOffset": 432
+    },
+    {
+      "buffer": 0,
+      "byteLength": 288,
+      "byteOffset": 864
+    },
+    {
+      "buffer": 0,
+      "byteLength": 144,
+      "byteOffset": 1152
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Cube_da4f8582-dde1-4dda-b89c-b1d25fb5452c_Data.bin",
+      "byteLength": 1296
+    }
+  ],
+  "images": [
+    {
+      "name": "Default Texture Image",
+      "uri": "test_default_texture.png",
+      "mimeType": "image/png"
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube_Mesh",
+      "primitives": [
+        {
+          "indices": 3,
+          "material": 0,
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          }
+        }
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "name": "material_primitive###Default Texture",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 0
+        },
+        "metallicFactor": 0,
+        "roughnessFactor": 0
+      },
+      "extensions": {
+        "KHR_materials_unlit": {}
+      }
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "Cube"
+    }
+  ],
+  "samplers": [
+    {
+    }
+  ],
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "NewScene",
+      "nodes": [ 0 ]
+    }
+  ],
+  "textures": [
+    {
+      "name": "Default Texture",
+      "source": 0,
+      "sampler": 0
+    }
+  ],
+  "extensionsUsed": [
+    "KHR_materials_unlit"
+  ]
+}
