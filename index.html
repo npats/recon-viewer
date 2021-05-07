@@ -33,7 +33,7 @@
 		import * as THREE from './three.js-r128/build/three.module.js';
 		import Stats from './three.js-r128/examples/jsm/libs/stats.module.js';
 		import { WEBGL } from './three.js-r128/examples/jsm/WebGL.js';
-		import { OrbitControls } from './three.js-r128/examples/jsm/controls/OrbitControls.js';
+		import { MapControls } from './three.js-r128/examples/jsm/controls/OrbitControls.js';
 		import { GLTFLoader } from './three.js-r128/examples/jsm/loaders/GLTFLoader.js';
 		import { FBXLoader } from './three.js-r128/examples/jsm/loaders/FBXLoader.js';
 		import { MTLLoader } from './three.js-r128/examples/jsm/loaders/MTLLoader.js';
@@ -101,8 +101,16 @@
 			renderer.setSize(window.innerWidth, window.innerHeight);
 			renderer.shadowMap.enabled = true;
 			container.appendChild(renderer.domElement);
-			controls = new OrbitControls(camera, renderer.domElement);
-			controls.update();
+			controls = new MapControls(camera, renderer.domElement);
+			controls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
+			controls.dampingFactor = 0.05;
+
+			controls.screenSpacePanning = true;
+
+			controls.minDistance = .001;
+			controls.maxDistance = 5000;
+
+			controls.maxPolarAngle = Math.PI / 2;
 
 			window.addEventListener('resize', onWindowResize, false);
 
@@ -487,7 +495,7 @@
 		function animate() {
 			requestAnimationFrame(animate);
 			var delta = clock.getDelta();
-			camera.lookAt(new THREE.Vector3(0, 0, 0));
+			controls.update(); // only required if controls.enableDamping = true, or if controls.autoRotate = true
 			renderer.render(scene, camera);
 			stats.update();
 			if (gui) {
