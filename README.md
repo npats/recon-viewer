@@ -18,7 +18,10 @@ To view recon.obj the URL should be:
 ```http://<server-path-to-recon>/?<folder_name>```
 
 <folder-name> is expected to exist in the resources folder and the model.json file there 
-provides the viewer with the list of files the OBJ consists of, in order to properly load it up.
+provides the viewer with the name of the model file it needs to load. Optionally we can add
+the rest of the files it needs (e.g. for OBJ files we can add the "materials": "some_mtl_file.mtl"),
+which can speedup the process, as we can instantly load the materials and don't need to string search
+the obj file for the "mtllib some_mtl_file.mtl" line.
 
 An example of the model.json exists in the repository.
 

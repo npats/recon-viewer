@@ -110,7 +110,7 @@
 			controls.minDistance = .001;
 			controls.maxDistance = 5000;
 
-			controls.maxPolarAngle = Math.PI / 2;
+			// controls.maxPolarAngle = Math.PI / 2;
 
 			window.addEventListener('resize', onWindowResize, false);
 
@@ -268,13 +268,15 @@
 						const mtl_finder = new THREE.FileLoader();
 						mtl_finder.setPath(resource_path);
 						mtl_finder.load(model_filename, function (text) {
-							var n = text.search("mtllib");
-							var new_str = text.substring(n, text.length);
-							var k = new_str.search("\r\n");
-							var final_str = new_str.substring(0, k);
-							var tokens = final_str.split(' ');
-							model_mtl_filename = tokens[1];
-
+							if(!model_mtl_filename || model_mtl_filename.length === 0)
+							{
+								var n = text.search("mtllib");
+								var new_str = text.substring(n, text.length);
+								var k = new_str.search("\r\n");
+								var final_str = new_str.substring(0, k);
+								var tokens = final_str.split(' ');
+								model_mtl_filename = tokens[1];
+							}
 
 							let materials_loader = load_manager.getHandler(model_mtl_filename);
 							// materials_loader.setPath(resource_path);

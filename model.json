@@ -1,9 +1,4 @@
 {
 	"model": "Case_study_1.obj",
-	"materials": "Case_study_1.mtl",
-	"textures":
-	[
-		"metal.jpg",
-		"wood_handle.jpg" 
-	]
+	"materials": "Case_study_1.mtl"
 }
