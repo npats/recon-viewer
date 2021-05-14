@@ -122,8 +122,7 @@
 			parseURLParameters();
 
 			initialize_load_manager();
-
-			loadSceneObjects();
+			const loading = loadSceneObjects();
 		}
 
 		function onLoadModelDescriptionProgress(xhr) {
@@ -203,7 +202,7 @@
 			let params = window.location.href;
 			params = params.replace(window.location.origin, "");
 			params = params.replace(window.location.pathname, "");
-			// remove the '#' character
+			// remove the '#'/'?' character
 			params = params.substr(1);
 			// // split the query parameters
 			// let queryParamArray = params.split('&');
@@ -215,165 +214,178 @@
 			// });
 			// print result object
 			// console.log(url_params);
-			url_params['model'] = decodeURIComponent(params);
+			url_params['model_fullpath'] = decodeURIComponent(params);
+			console.log("url_params[model]:"+url_params['model_fullpath'])
+
+			url_params['resource_path'] = 'resources/';
+			var tokens = url_params['model_fullpath'].split('/');
+			url_params['model_filename'] = url_params['model_fullpath'];
+			if(tokens.length > 1)
+			{
+				url_params['model_filename'] = tokens[tokens.length - 1];
+				for(var i=0;i<tokens.length - 1;i++)
+				{
+					url_params['resource_path'] += tokens[i];
+				}
+				if(!url_params['resource_path'].endsWith("/"))
+				{
+					url_params['resource_path'] += "/";
+				}
+			}
 		}
 
-		function loadSceneObjects() {
-			//figure out urls for stuff here and use later
-			let resource_path = 'resources/' + url_params['model'] + '/';
-
-			var json_filename = 'model.json';
-			var json_file_descr = resource_path + json_filename;
-			var json;
+		function loadSceneObjects() 
+		{
+			return new Promise((resolve, reject)=>
 			{
-				let json_loader = load_manager.getHandler(json_filename);
-				json_loader.setPath(resource_path);
+				let resource_path = url_params['resource_path'];
+				let model_filename = url_params['model_filename'];
+				let json = "";
+				let loader = load_manager.getHandler(model_filename);
+
+				if (loader.constructor == OBJLoader) {
+					let obj_filename = model_filename;
+					query_mtl_filepath(resource_path, obj_filename)
+					.then((model_mtl_filename) =>
+					{
+						return load_materials(resource_path, model_mtl_filename)
+					})
+					.then((materials)=>
+					{
+						return loadOBJ(resource_path, obj_filename, materials)
+					}
+					).then((object)=>
+					{
+						return init_finalize(object, "");
+					});
+				}
+				else  {
+					return loadGLTForFBX(resource_path, model_filename);
+				}
+			});
+		}
+
+//#region OBJ
+		function query_mtl_filepath(resource_path, obj_filename)
+		{
+			return new Promise((resolve, reject) => 
+			{
+				const mtl_finder = new THREE.FileLoader();
+				mtl_finder.setPath(resource_path);
+				mtl_finder.load(obj_filename, function (text) 
+				{
+					var n = text.search("mtllib");
+					var new_str = text.substring(n, text.length);
+					var k = new_str.search("\r\n");
+					var final_str = new_str.substring(0, k);
+					var tokens = final_str.split(' ');
+					let model_mtl_filename = tokens[1];
+					resolve(model_mtl_filename);
+				});
+			});
+		}
+
+		function load_materials(resource_path, model_mtl_filename)
+		{
+			return new Promise((resolve, reject) => 
+			{
+				//Create gui for materials load
+				loading_bar_controllers[model_mtl_filename] = gui.add(fizzyText, 'loading_materials', 0, 100);
+				loading_bar_controllers[model_mtl_filename].setValue(0);
+
+				let materials_loader = load_manager.getHandler(model_mtl_filename);
+				materials_loader.setPath(resource_path);
+				materials_loader.setMaterialOptions({side: THREE.DoubleSide});
+
+				materials_loader.load(model_mtl_filename,
+					//onLoad callback
+					function (materials) {
+						gui.remove(loading_bar_controllers[model_mtl_filename]);
+						delete loading_bar_controllers[model_mtl_filename];
+						resolve(materials);
+					},
+					onLoadMaterialProgress,
+					onLoadMaterialError
+				);
+			});
+		}
+
+		function loadOBJ(resource_path, obj_filename, materials)
+		{
+			return new Promise((resolve) => 
+			{
+				//gui update				
+				materials.preload();
+
+				let model_loader = load_manager.getHandler(obj_filename);
+				model_loader.setPath(resource_path);
+				model_loader.setMaterials(materials);
 
 				//Create gui for json load
-				loading_bar_controllers[json_filename] = gui.add(fizzyText, 'loading_model_description', 0, 100);
-				loading_bar_controllers[json_filename].setValue(0);
+				loading_bar_controllers[obj_filename] = gui.add(fizzyText, 'loading_objects', 0, 100);
+				loading_bar_controllers[obj_filename].setValue(0);
 
-				json_loader.load(json_filename, function (text) {
-					//gui update
-					gui.remove(loading_bar_controllers[json_filename]);
-					delete loading_bar_controllers[json_filename];
+				model_loader.load(obj_filename,
+					function (object) {
+						//gui update
+						object.name = obj_filename;
+						gui.remove(loading_bar_controllers[obj_filename]);
+						delete loading_bar_controllers[obj_filename];
 
-					json = JSON.parse(text);
-					const promises = [
-						loadObject(resource_path, json)
-					];
-
-					return Promise.all(promises).then(result => {
-
-						init_finalize(json);
-						return;
-					});
-				},
-					onLoadModelDescriptionProgress,
-					onLoadModelDescriptionError);
-			}
+						scene.add(object);
+						resolve(object);
+					},
+					onLoadObjectProgress,
+					onLoadObjectError
+				);
+			});
 		}
+//#endregion
 
-		function loadObject(resource_path, json) {
-			var model_filename = json.model;
-			var model_mtl_filename = json.materials;
+//#region GLTF
+		function loadGLTForFBX(resource_path, model_filename)
+		{
+			return new Promise((resolve, reject) => 
+			{
+				let loader = load_manager.getHandler(model_filename);
+				loader.setPath(resource_path);
+				// loader.setResourcePath('');
 
-			let loader = load_manager.getHandler(model_filename);
+				//Create gui for json load
+				loading_bar_controllers[model_filename] = gui.add(fizzyText, 'loading_objects', 0, 100);
+				loading_bar_controllers[model_filename].setValue(0);
 
-			if (loader.constructor == OBJLoader) {
-				return new Promise(resolve => {
+				loader.load(model_filename,
+					//onLoad callback
+					function (object) {
+						//gui update
+						gui.remove(loading_bar_controllers[model_filename]);
+						delete loading_bar_controllers[model_filename];
 
+						if (loader.constructor == GLTFLoader) {
+							object.scene.scale.set(2, 2, 2);
+							object.scene.position.x = 0;				    //Position (x = right+ left-) 
+							object.scene.position.y = 0;				    //Position (y = up+, down-)
+							object.scene.position.z = 0;				    //Position (z = front +, back-)
 
-					{
-						const mtl_finder = new THREE.FileLoader();
-						mtl_finder.setPath(resource_path);
-						mtl_finder.load(model_filename, function (text) {
-							if(!model_mtl_filename || model_mtl_filename.length === 0)
-							{
-								var n = text.search("mtllib");
-								var new_str = text.substring(n, text.length);
-								var k = new_str.search("\r\n");
-								var final_str = new_str.substring(0, k);
-								var tokens = final_str.split(' ');
-								model_mtl_filename = tokens[1];
-							}
+							scene.add(object.scene);
 
-							let materials_loader = load_manager.getHandler(model_mtl_filename);
-							// materials_loader.setPath(resource_path);
-							// materials_loader.setResourcePath('');
+						}
+						else if (loader.constructor == FBXLoader) {
 
-							//Create gui for materials load
-							loading_bar_controllers[model_mtl_filename] = gui.add(fizzyText, 'loading_materials', 0, 100);
-							loading_bar_controllers[model_mtl_filename].setValue(0);
+						}
 
-							materials_loader.setMaterialOptions({
-								side: THREE.DoubleSide
-							});
-
-							materials_loader.load(resource_path + "/" + model_mtl_filename,
-								//onLoad callback
-								function (materials) {
-									//gui update
-									gui.remove(loading_bar_controllers[model_mtl_filename]);
-									delete loading_bar_controllers[model_mtl_filename];
-
-									materials.preload();
-
-									let model_loader = load_manager.getHandler(model_filename);
-									model_loader.setPath(resource_path);
-									model_loader.setMaterials(materials);
-									// model_loader.setUseIndices(true);
-									// model_loader.setDisregardNormals(false);
-									// model_loader.setModelName(model_filename);
-
-									//Create gui for json load
-									loading_bar_controllers[model_filename] = gui.add(fizzyText, 'loading_objects', 0, 100);
-									loading_bar_controllers[model_filename].setValue(0);
-
-									model_loader.load(model_filename,
-										function (object) {
-											//gui update
-											object.name = model_filename;
-											gui.remove(loading_bar_controllers[model_filename]);
-											delete loading_bar_controllers[model_filename];
-
-											scene.add(object);
-											resolve(object);
-										},
-										onLoadObjectProgress,
-										onLoadObjectError
-									);
-								},
-								onLoadMaterialProgress,
-								onLoadMaterialError
-							);
-						},
-						onProgress,
-						onError);
-					}
-				});
-			}
-			else {
-				return new Promise(resolve => {
-					loader.setPath(resource_path);
-					loader.setResourcePath('');
-
-					//Create gui for json load
-					loading_bar_controllers[model_filename] = gui.add(fizzyText, 'loading_objects', 0, 100);
-					loading_bar_controllers[model_filename].setValue(0);
-
-					loader.load(model_filename,
-						//onLoad callback
-						function (object) {
-							//gui update
-							gui.remove(loading_bar_controllers[model_filename]);
-							delete loading_bar_controllers[model_filename];
-
-							if (loader.constructor == GLTFLoader) {
-								object.scene.scale.set(2, 2, 2);
-								object.scene.position.x = 0;				    //Position (x = right+ left-) 
-								object.scene.position.y = 0;				    //Position (y = up+, down-)
-								object.scene.position.z = 0;				    //Position (z = front +, back-)
-
-								scene.add(object.scene);
-
-							}
-							else if (loader.constructor == FBXLoader) {
-
-							}
-
-
-							resolve(object);
-						},
-						onLoadObjectProgress,
-						onError
-					);
-
-				});
-			}
+						resolve(object);
+					},
+					onLoadObjectProgress,
+					onError
+				);
+			});
 		}
+//#endregion
 
-		function init_finalize(json) {
+		function init_finalize(object, json) 
+		{
 			var oi;
 			var scene_obj_count = scene.children.length
 			var sceneBoundingBox = new THREE.Box3();
