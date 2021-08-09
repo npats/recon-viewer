@@ -58,6 +58,33 @@
 
 		var load_manager;
 
+		function frameArea(sizeToFitOnScreen, boxSize, boxCenter, camera) 
+		{
+			const halfSizeToFitOnScreen = sizeToFitOnScreen * 0.5;
+			const halfFovY = THREE.Math.degToRad(camera.fov * .5);
+			const distance = halfSizeToFitOnScreen / Math.tan(halfFovY);
+			// compute a unit vector that points in the direction the camera is now
+			// in the xz plane from the center of the box
+			const direction = (new THREE.Vector3())
+				.subVectors(camera.position, boxCenter)
+				.multiply(new THREE.Vector3(1, 0, 1))
+				.normalize();
+
+			// move the camera to a position distance units way from the center
+			// in whatever direction the camera was from the center already
+			camera.position.copy(direction.multiplyScalar(distance).add(boxCenter));
+
+			// pick some near and far values for the frustum that
+			// will contain the box.
+			camera.near = boxSize / 100;
+			camera.far = boxSize * 100;
+
+			camera.updateProjectionMatrix();
+
+			// point the camera to look at the center of the box
+			camera.lookAt(boxCenter.x, boxCenter.y, boxCenter.z);
+		}
+
 		function init() {
 			if (!WEBGL.isWebGLAvailable()) {
 				var warning = WEBGL.getWebGLErrorMessage();
@@ -70,31 +97,53 @@
 			camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.001, 20000);
 			camera.position.set(100, 200, 300);
 			scene = new THREE.Scene();
-			// scene.background = new THREE.Color( ambient_color );
+			scene.background = new THREE.Color( ambient_color );
 			// scene.fog = new THREE.Fog( ambient_color, 200, 1000 );
 
-			let ambientLight = new THREE.AmbientLight(0xFFFFFF);
-
+			
 			// let directionalLight1 = new THREE.DirectionalLight( 0xFFFFFF );
 			// let directionalLight2 = new THREE.DirectionalLight( 0xFFFFFF );
 			// directionalLight1.position.set( - 100, - 50, 100 );
 			// directionalLight2.position.set( 100, 50, - 100 );
 			// scene.add( directionalLight1 );
 			// scene.add( directionalLight2 );				
-			scene.add(ambientLight);
+			
+			{
+				//scene.add(ambientLight);
+				//let ambientLight = new THREE.AmbientLight(0xFFFFFF);
+			}
+			
+			{
+				const skyColor = 0xB1E1FF; // light blue
+				const groundColor = 0xB97A20; // brownish orange
+				const intensity = 1;
+				const light = new THREE.HemisphereLight(skyColor, groundColor, intensity);
+				scene.add(light);
+			}
+
+			{
+				const color = 0xFFFFFF;
+				const intensity = 0.1;
+				const light = new THREE.DirectionalLight(color, intensity);
+				light.position.set(5, 10, 2);
+				scene.add(light);
+				scene.add(light.target);
+			}
 
 			// scene.add( new CameraHelper( light.shadow.camera ) );
-			// ground
-			var mesh = new THREE.Mesh(new THREE.PlaneBufferGeometry(2000, 2000), new THREE.MeshPhongMaterial({ color: 0x999999, depthWrite: false }));
-			mesh.rotation.x = - Math.PI / 2;
-			mesh.receiveShadow = false;
-			mesh.material.side = THREE.DoubleSide;
-			scene.add(mesh);
-			var grid = new THREE.GridHelper(2000, 20, 0x000000, 0x000000);
-			grid.material.opacity = 1.0;
-			grid.material.transparent = true;
+			{
+				// // ground
+				// var mesh = new THREE.Mesh(new THREE.PlaneBufferGeometry(2000, 2000), new THREE.MeshPhongMaterial({ color: 0x999999, depthWrite: false }));
+				// mesh.rotation.x = - Math.PI / 2;
+				// mesh.receiveShadow = false;
+				// mesh.material.side = THREE.DoubleSide;
+				// scene.add(mesh);
+				// var grid = new THREE.GridHelper(2000, 20, 0x000000, 0x000000);
+				// grid.material.opacity = 1.0;
+				// grid.material.transparent = true;
 
-			scene.add(grid);
+				// scene.add(grid);
+			}
 
 			renderer = new THREE.WebGLRenderer({ antialias: true });
 			renderer.setPixelRatio(window.devicePixelRatio);
@@ -494,9 +543,20 @@
 			sceneBoundingBox.getSize(extents);
 			extents.divideScalar(2.0);
 
-			var new_camera_position = new THREE.Vector3();
-			new_camera_position.addVectors(bb_center, extents);
-			new_camera_position.multiplyScalar(2);
+			{
+				// compute the box that contains all the stuff
+                // from root and below
+                const box = new THREE.Box3().setFromObject(object);
+
+                const boxSize = box.getSize(new THREE.Vector3()).length();
+                const boxCenter = box.getCenter(new THREE.Vector3());
+
+                // set the camera to frame the box
+                frameArea(boxSize * 1.2, boxSize, boxCenter, camera);
+			}
+			// var new_camera_position = new THREE.Vector3();
+			// new_camera_position.addVectors(bb_center, extents);
+			// new_camera_position.multiplyScalar(2);
 
 			//camera.position.set(new_camera_position.x, new_camera_position.y, new_camera_position.z);
 
