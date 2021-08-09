@@ -277,6 +277,10 @@
 					var n = text.search("mtllib");
 					var new_str = text.substring(n, text.length);
 					var k = new_str.search("\r\n");
+					if(k == -1)
+					{
+						k = new_str.search("\n");
+					}
 					var final_str = new_str.substring(0, k);
 					var tokens = final_str.split(' ');
 					let model_mtl_filename = tokens[1];
